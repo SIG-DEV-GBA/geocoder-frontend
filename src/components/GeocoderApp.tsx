@@ -28,7 +28,7 @@ type ApiStatus = 'checking' | 'online' | 'offline';
 
 export default function GeocoderApp() {
   // State
-  const [apiUrl, setApiUrl] = useState('http://localhost:8000');
+  const [apiUrl, setApiUrl] = useState('https://apicp.si-erp.cloud');
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
   const [provincias, setProvincias] = useState<Provincia[]>([]);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
