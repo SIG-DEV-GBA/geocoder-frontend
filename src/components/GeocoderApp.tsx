@@ -7,6 +7,17 @@ interface ProcessingResult {
   errores: number;
 }
 
+interface LogEntry {
+  id: number;
+  type: 'info' | 'found' | 'not_found' | 'error' | 'complete';
+  row?: number;
+  direccion?: string;
+  municipio?: string;
+  cp?: string;
+  message?: string;
+  timestamp: Date;
+}
+
 interface ApiError {
   message: string;
   status?: number;
@@ -23,15 +34,19 @@ export default function GeocoderApp() {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [progressText, setProgressText] = useState('');
+  const [totalRows, setTotalRows] = useState(0);
   const [result, setResult] = useState<ProcessingResult | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadFilename, setDownloadFilename] = useState<string>('resultado.xlsx');
   const [error, setError] = useState<ApiError | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const [showLog, setShowLog] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const logContainerRef = useRef<HTMLDivElement>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const logIdRef = useRef(0);
 
   // Check API status
   const checkApiStatus = async () => {
@@ -55,6 +70,13 @@ export default function GeocoderApp() {
     checkApiStatus();
   }, [apiUrl]);
 
+  // Auto-scroll log to bottom
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logEntries]);
+
   // File handling
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -68,12 +90,10 @@ export default function GeocoderApp() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile && isValidFile(droppedFile)) {
       setFile(droppedFile);
-      setResult(null);
-      setDownloadUrl(null);
+      resetState();
     }
   };
 
@@ -81,8 +101,7 @@ export default function GeocoderApp() {
     const selectedFile = e.target.files?.[0];
     if (selectedFile && isValidFile(selectedFile)) {
       setFile(selectedFile);
-      setResult(null);
-      setDownloadUrl(null);
+      resetState();
     }
   };
 
@@ -97,178 +116,165 @@ export default function GeocoderApp() {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  const removeFile = () => {
-    setFile(null);
+  const resetState = () => {
     setResult(null);
     setDownloadUrl(null);
     setError(null);
     setProgress(0);
-    setProgressText('');
+    setTotalRows(0);
+    setLogEntries([]);
+    setShowLog(false);
+  };
+
+  const removeFile = () => {
+    setFile(null);
+    resetState();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  // Format elapsed time
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    if (mins > 0) {
-      return `${mins}m ${secs}s`;
-    }
+    if (mins > 0) return `${mins}m ${secs}s`;
     return `${secs}s`;
   };
 
-  // Cleanup intervals on unmount
+  const addLogEntry = (entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
+    logIdRef.current += 1;
+    setLogEntries(prev => [...prev, { ...entry, id: logIdRef.current, timestamp: new Date() }]);
+  };
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, []);
 
-  // Process file
+  // Process file with SSE
   const processFile = async () => {
     if (!file || apiStatus !== 'online') return;
 
     setIsProcessing(true);
     setProgress(0);
     setElapsedTime(0);
-    setProgressText('Subiendo archivo...');
+    setTotalRows(0);
     setResult(null);
     setDownloadUrl(null);
     setError(null);
+    setLogEntries([]);
+    setShowLog(true);
+    logIdRef.current = 0;
 
     const formData = new FormData();
     formData.append('file', file);
 
-    // Start elapsed time counter
+    // Start timer
     const startTime = Date.now();
     timerIntervalRef.current = setInterval(() => {
       setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
     }, 1000);
 
-    // Progress simulation that never stops (slows down after 90%)
-    let currentProgress = 0;
-    progressIntervalRef.current = setInterval(() => {
-      setProgress(prev => {
-        if (prev < 30) {
-          currentProgress = prev + Math.random() * 8;
-        } else if (prev < 60) {
-          currentProgress = prev + Math.random() * 5;
-        } else if (prev < 85) {
-          currentProgress = prev + Math.random() * 2;
-        } else if (prev < 95) {
-          // Very slow progress after 85%
-          currentProgress = prev + Math.random() * 0.5;
-        } else {
-          // Micro progress to show activity
-          currentProgress = Math.min(99, prev + Math.random() * 0.1);
-        }
-        return Math.min(99, currentProgress);
-      });
-    }, 500);
+    addLogEntry({ type: 'info', message: `Iniciando procesamiento de ${file.name}...` });
 
     try {
-      setProgressText('Procesando direcciones... (esto puede tardar varios minutos)');
-
-      const response = await fetch(`${apiUrl}/procesar-excel`, {
+      const response = await fetch(`${apiUrl}/procesar-excel-stream`, {
         method: 'POST',
         body: formData,
       });
 
-      // Clear intervals
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        setDownloadUrl(url);
-
-        // Try to get result stats from headers
-        const statsHeader = response.headers.get('X-Processing-Stats');
-        const timeHeader = response.headers.get('X-Processing-Time');
-        let stats: ProcessingResult | null = null;
-
-        if (statsHeader) {
-          try {
-            const rawStats = JSON.parse(statsHeader);
-            console.log('Stats from API:', rawStats);
-            // Usar ?? en lugar de || para que 0 no se trate como falso
-            stats = {
-              total: rawStats.procesadas ?? 0,
-              encontrados: rawStats.encontradas ?? 0,
-              noEncontrados: rawStats.no_encontradas ?? 0,
-              errores: rawStats.errores ?? 0
-            };
-          } catch (e) {
-            console.warn('Could not parse stats header:', statsHeader);
-          }
-        }
-
-        setProgress(100);
-        const timeText = timeHeader || formatTime(Math.floor((Date.now() - startTime) / 1000));
-        setProgressText(`Completado en ${timeText}`);
-
-        // Use stats from header or show message
-        if (stats) {
-          setResult(stats);
-        } else {
-          setResult({
-            total: 0,
-            encontrados: 0,
-            noEncontrados: 0,
-            errores: 0
-          });
-        }
-      } else {
-        // Handle error response
-        let errorDetails = '';
-        let errorData: any = null;
-
-        try {
-          const contentType = response.headers.get('content-type');
-          if (contentType?.includes('application/json')) {
-            errorData = await response.json();
-            errorDetails = JSON.stringify(errorData, null, 2);
-          } else {
-            errorDetails = await response.text();
-          }
-        } catch {
-          errorDetails = 'No se pudo leer la respuesta del servidor';
-        }
-
-        console.error('API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          details: errorDetails
-        });
-
-        setError({
-          message: errorData?.detail || errorData?.message || `Error ${response.status}: ${response.statusText}`,
-          status: response.status,
-          details: errorDetails
-        });
-        setProgress(0);
-        setProgressText('');
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No se pudo leer la respuesta');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              handleSSEEvent(data);
+            } catch (e) {
+              console.warn('Error parsing SSE:', e);
+            }
+          }
+        }
+      }
+
     } catch (err) {
-      // Clear intervals
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
-      console.error('Fetch Error:', err);
-
-      setError({
-        message: `Error de conexion: ${errorMessage}`,
-        details: err instanceof Error ? err.stack : undefined
-      });
-      setProgress(0);
-      setProgressText('');
+      addLogEntry({ type: 'error', message: `Error: ${errorMessage}` });
+      setError({ message: errorMessage });
     } finally {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       setIsProcessing(false);
+    }
+  };
+
+  const handleSSEEvent = (data: any) => {
+    switch (data.type) {
+      case 'start':
+        setTotalRows(data.total);
+        addLogEntry({ type: 'info', message: `Archivo cargado: ${data.total} filas detectadas` });
+        break;
+
+      case 'progress':
+        setProgress(Math.round((data.stats.procesadas / data.total) * 100));
+        addLogEntry({
+          type: data.status === 'found' ? 'found' : 'not_found',
+          row: data.row,
+          direccion: data.direccion,
+          municipio: data.municipio,
+          cp: data.cp
+        });
+        break;
+
+      case 'row_error':
+        addLogEntry({ type: 'error', row: data.row, message: data.error });
+        break;
+
+      case 'error':
+        addLogEntry({ type: 'error', message: data.message });
+        setError({ message: data.message });
+        break;
+
+      case 'complete':
+        setProgress(100);
+        setResult({
+          total: data.stats.procesadas,
+          encontrados: data.stats.encontradas,
+          noEncontrados: data.stats.no_encontradas,
+          errores: data.stats.errores
+        });
+        addLogEntry({ type: 'complete', message: `Completado en ${data.elapsed}` });
+
+        // Create download URL from base64
+        if (data.file) {
+          const byteCharacters = atob(data.file);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          setDownloadUrl(URL.createObjectURL(blob));
+          setDownloadFilename(data.filename);
+        }
+        break;
     }
   };
 
@@ -276,7 +282,7 @@ export default function GeocoderApp() {
     if (downloadUrl) {
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `geocodificado_${file?.name || 'resultado.xlsx'}`;
+      link.download = downloadFilename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -387,7 +393,7 @@ export default function GeocoderApp() {
                   <div className="file-name">{file.name}</div>
                   <div className="file-size">{formatFileSize(file.size)}</div>
                 </div>
-                <button className="file-remove" onClick={removeFile}>
+                <button className="file-remove" onClick={removeFile} disabled={isProcessing}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="18" y1="6" x2="6" y2="18"/>
                     <line x1="6" y1="6" x2="18" y2="18"/>
@@ -419,26 +425,28 @@ export default function GeocoderApp() {
               </button>
             </div>
 
-            {/* Progress */}
-            {isProcessing && (
+            {/* Progress Bar */}
+            {(isProcessing || progress > 0) && (
               <div className="progress-container">
                 <div className="progress-bar">
                   <div className="progress-fill" style={{ width: `${progress}%` }}></div>
                 </div>
                 <div className="progress-text">
-                  <span className="progress-status">{progressText}</span>
+                  <span className="progress-status">
+                    {isProcessing ? `Procesando... ${totalRows > 0 ? `(${totalRows} filas)` : ''}` : 'Completado'}
+                  </span>
                   <span style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                     <span style={{ color: '#666', fontSize: '0.85rem' }}>
                       Tiempo: {formatTime(elapsedTime)}
                     </span>
-                    <span>{Math.round(progress)}%</span>
+                    <span>{progress}%</span>
                   </span>
                 </div>
               </div>
             )}
 
             {/* Error Display */}
-            {error && (
+            {error && !isProcessing && (
               <div className="error-container" style={{
                 marginTop: '1.5rem',
                 padding: '1rem',
@@ -446,69 +454,91 @@ export default function GeocoderApp() {
                 border: '1px solid #fecaca',
                 borderRadius: '8px'
               }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  color: '#dc2626',
-                  fontWeight: 600,
-                  marginBottom: '0.5rem'
-                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#dc2626', fontWeight: 600 }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10"/>
                     <line x1="12" y1="8" x2="12" y2="12"/>
                     <line x1="12" y1="16" x2="12.01" y2="16"/>
                   </svg>
-                  Error {error.status && `(${error.status})`}
+                  Error
                 </div>
-                <p style={{ color: '#991b1b', margin: '0 0 0.5rem 0' }}>{error.message}</p>
-                {error.details && (
-                  <details style={{ marginTop: '0.5rem' }}>
-                    <summary style={{
-                      cursor: 'pointer',
-                      color: '#666',
-                      fontSize: '0.85rem',
-                      userSelect: 'none'
-                    }}>
-                      Ver detalles tecnicos
-                    </summary>
-                    <pre style={{
-                      marginTop: '0.5rem',
-                      padding: '0.75rem',
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e5e5',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      overflow: 'auto',
-                      maxHeight: '200px',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-all'
-                    }}>
-                      {error.details}
-                    </pre>
-                  </details>
-                )}
-                <button
-                  onClick={() => setError(null)}
-                  style={{
-                    marginTop: '0.75rem',
-                    padding: '0.5rem 1rem',
-                    backgroundColor: '#dc2626',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem'
-                  }}
-                >
-                  Cerrar
-                </button>
+                <p style={{ color: '#991b1b', margin: '0.5rem 0 0' }}>{error.message}</p>
               </div>
             )}
           </div>
 
+          {/* Live Log Terminal */}
+          {showLog && (
+            <div className="card fade-in" style={{ padding: 0, overflow: 'hidden' }}>
+              <div className="terminal-header">
+                <div className="terminal-dots">
+                  <span className="dot red"></span>
+                  <span className="dot yellow"></span>
+                  <span className="dot green"></span>
+                </div>
+                <span className="terminal-title">Procesamiento en Tiempo Real</span>
+                <span className="terminal-stats">
+                  {logEntries.filter(e => e.type === 'found').length} encontrados · {logEntries.filter(e => e.type === 'not_found').length} no encontrados
+                </span>
+              </div>
+              <div className="terminal-body" ref={logContainerRef}>
+                {logEntries.map((entry, idx) => (
+                  <div
+                    key={entry.id}
+                    className={`log-entry log-${entry.type}`}
+                    style={{ animationDelay: `${Math.min(idx * 0.02, 0.5)}s` }}
+                  >
+                    <span className="log-time">
+                      {entry.timestamp.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                    {entry.type === 'info' && (
+                      <>
+                        <span className="log-badge info">INFO</span>
+                        <span className="log-message">{entry.message}</span>
+                      </>
+                    )}
+                    {entry.type === 'found' && (
+                      <>
+                        <span className="log-badge found">CP {entry.cp}</span>
+                        <span className="log-row">#{entry.row}</span>
+                        <span className="log-direccion">{entry.direccion}</span>
+                        <span className="log-municipio">{entry.municipio}</span>
+                      </>
+                    )}
+                    {entry.type === 'not_found' && (
+                      <>
+                        <span className="log-badge not-found">NO ENCONTRADO</span>
+                        <span className="log-row">#{entry.row}</span>
+                        <span className="log-direccion">{entry.direccion}</span>
+                        <span className="log-municipio">{entry.municipio}</span>
+                      </>
+                    )}
+                    {entry.type === 'error' && (
+                      <>
+                        <span className="log-badge error">ERROR</span>
+                        {entry.row && <span className="log-row">#{entry.row}</span>}
+                        <span className="log-message">{entry.message}</span>
+                      </>
+                    )}
+                    {entry.type === 'complete' && (
+                      <>
+                        <span className="log-badge complete">COMPLETADO</span>
+                        <span className="log-message">{entry.message}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+                {isProcessing && (
+                  <div className="log-entry log-processing">
+                    <span className="log-cursor"></span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Results */}
-          {result && (
+          {result && !isProcessing && (
             <div className="card fade-in">
               <div className="card-title">
                 <div className="card-title-icon">
@@ -523,7 +553,7 @@ export default function GeocoderApp() {
               <div className="results-summary">
                 <div className="result-stat">
                   <div className="result-stat-value">{result.total}</div>
-                  <div className="result-stat-label">Total</div>
+                  <div className="result-stat-label">Procesadas</div>
                 </div>
                 <div className="result-stat success">
                   <div className="result-stat-value">{result.encontrados}</div>

@@ -738,3 +738,260 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--gray-500);
 }
+
+/* ========================================
+   TERMINAL LOG STYLES
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem 1.25rem;
+  background: linear-gradient(180deg, #2a2520 0%, #1f1c18 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.terminal-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.terminal-dots .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.terminal-dots .dot.red {
+  background: linear-gradient(135deg, #ff6058 0%, #e04942 100%);
+  box-shadow: 0 0 8px rgba(255, 96, 88, 0.3);
+}
+
+.terminal-dots .dot.yellow {
+  background: linear-gradient(135deg, #ffbd2e 0%, #e5a829 100%);
+  box-shadow: 0 0 8px rgba(255, 189, 46, 0.3);
+}
+
+.terminal-dots .dot.green {
+  background: linear-gradient(135deg, #28c940 0%, #20a835 100%);
+  box-shadow: 0 0 8px rgba(40, 201, 64, 0.3);
+}
+
+.terminal-title {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.terminal-stats {
+  margin-left: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.terminal-body {
+  background: linear-gradient(180deg, #1a1714 0%, #141210 100%);
+  min-height: 300px;
+  max-height: 450px;
+  overflow-y: auto;
+  padding: 1rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.terminal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminal-body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.terminal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.terminal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Log Entries */
+.log-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  animation: logSlideIn 0.3s ease-out forwards;
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+@keyframes logSlideIn {
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.log-time {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.log-badge.info {
+  background: rgba(100, 149, 237, 0.2);
+  color: #6495ed;
+  border: 1px solid rgba(100, 149, 237, 0.3);
+}
+
+.log-badge.found {
+  background: rgba(45, 157, 120, 0.2);
+  color: #5ed4a8;
+  border: 1px solid rgba(45, 157, 120, 0.3);
+}
+
+.log-badge.not-found {
+  background: rgba(255, 180, 50, 0.15);
+  color: #ffb432;
+  border: 1px solid rgba(255, 180, 50, 0.25);
+}
+
+.log-badge.error {
+  background: rgba(214, 69, 69, 0.2);
+  color: #ff6b6b;
+  border: 1px solid rgba(214, 69, 69, 0.3);
+}
+
+.log-badge.complete {
+  background: rgba(209, 124, 34, 0.2);
+  color: var(--primary-light);
+  border: 1px solid rgba(209, 124, 34, 0.3);
+}
+
+.log-row {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.log-direccion {
+  color: rgba(255, 255, 255, 0.85);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-municipio {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  padding-left: 0.5rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-message {
+  color: rgba(255, 255, 255, 0.7);
+  flex: 1;
+}
+
+/* Log type specific styles */
+.log-entry.log-found .log-direccion {
+  color: rgba(94, 212, 168, 0.9);
+}
+
+.log-entry.log-error {
+  background: rgba(214, 69, 69, 0.05);
+}
+
+.log-entry.log-complete {
+  background: linear-gradient(90deg, rgba(209, 124, 34, 0.1) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(209, 124, 34, 0.2);
+}
+
+.log-entry.log-complete .log-message {
+  color: var(--primary-light);
+  font-weight: 500;
+}
+
+/* Cursor animation */
+.log-entry.log-processing {
+  border-bottom: none;
+}
+
+.log-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--primary);
+  animation: cursorBlink 1s infinite;
+  margin-left: 0.5rem;
+}
+
+@keyframes cursorBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Responsive terminal */
+@media (max-width: 768px) {
+  .terminal-header {
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+  }
+
+  .terminal-title {
+    font-size: 0.7rem;
+  }
+
+  .terminal-stats {
+    width: 100%;
+    margin-top: 0.5rem;
+    margin-left: 0;
+    text-align: center;
+  }
+
+  .terminal-body {
+    font-size: 0.7rem;
+    min-height: 200px;
+    max-height: 300px;
+  }
+
+  .log-entry {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .log-direccion {
+    width: 100%;
+    order: 10;
+    padding-left: 0;
+  }
+
+  .log-municipio {
+    border-left: none;
+    padding-left: 0;
+  }
+}
