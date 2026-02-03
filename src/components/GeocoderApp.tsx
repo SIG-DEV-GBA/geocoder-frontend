@@ -1,15 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-
-interface Provincia {
-  id: string;
-  codigo: string;
-  nombre: string;
-}
-
-interface Municipio {
-  cmun: string;
-  nombre: string;
-}
+import { useState, useRef, useEffect } from 'react';
 
 interface ProcessingResult {
   total: number;
@@ -30,10 +19,6 @@ export default function GeocoderApp() {
   // State
   const [apiUrl, setApiUrl] = useState('https://apicp.si-erp.cloud');
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
-  const [provincias, setProvincias] = useState<Provincia[]>([]);
-  const [municipios, setMunicipios] = useState<Municipio[]>([]);
-  const [selectedProvincia, setSelectedProvincia] = useState('');
-  const [selectedMunicipio, setSelectedMunicipio] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -49,16 +34,14 @@ export default function GeocoderApp() {
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Check API status
-  const checkApiStatus = useCallback(async () => {
+  const checkApiStatus = async () => {
     setApiStatus('checking');
     try {
-      const response = await fetch(`${apiUrl}/provincias`, {
+      const response = await fetch(`${apiUrl}/`, {
         method: 'GET',
         signal: AbortSignal.timeout(5000)
       });
       if (response.ok) {
-        const data = await response.json();
-        setProvincias(data);
         setApiStatus('online');
       } else {
         setApiStatus('offline');
@@ -66,33 +49,11 @@ export default function GeocoderApp() {
     } catch {
       setApiStatus('offline');
     }
-  }, [apiUrl]);
+  };
 
   useEffect(() => {
     checkApiStatus();
-  }, [checkApiStatus]);
-
-  // Load municipios when provincia changes
-  useEffect(() => {
-    if (!selectedProvincia || apiStatus !== 'online') {
-      setMunicipios([]);
-      return;
-    }
-
-    const loadMunicipios = async () => {
-      try {
-        const response = await fetch(`${apiUrl}/municipios/${selectedProvincia}`);
-        if (response.ok) {
-          const data = await response.json();
-          setMunicipios(data);
-        }
-      } catch {
-        setMunicipios([]);
-      }
-    };
-
-    loadMunicipios();
-  }, [selectedProvincia, apiUrl, apiStatus]);
+  }, [apiUrl]);
 
   // File handling
   const handleDragOver = (e: React.DragEvent) => {
@@ -180,12 +141,6 @@ export default function GeocoderApp() {
 
     const formData = new FormData();
     formData.append('file', file);
-    if (selectedProvincia) {
-      formData.append('filtro_provincia', selectedProvincia);
-    }
-    if (selectedMunicipio) {
-      formData.append('filtro_municipio', selectedMunicipio);
-    }
 
     // Start elapsed time counter
     const startTime = Date.now();
@@ -379,55 +334,8 @@ export default function GeocoderApp() {
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="card fade-in stagger-1">
-            <div className="card-title">
-              <div className="card-title-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-                </svg>
-              </div>
-              Filtros (Opcional)
-            </div>
-
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">Provincia</label>
-                <select
-                  className="form-select"
-                  value={selectedProvincia}
-                  onChange={(e) => {
-                    setSelectedProvincia(e.target.value);
-                    setSelectedMunicipio('');
-                  }}
-                  disabled={apiStatus !== 'online'}
-                >
-                  <option value="">Todas las provincias</option>
-                  {provincias.map(p => (
-                    <option key={p.id} value={p.nombre}>{p.nombre}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Municipio</label>
-                <select
-                  className="form-select"
-                  value={selectedMunicipio}
-                  onChange={(e) => setSelectedMunicipio(e.target.value)}
-                  disabled={!selectedProvincia || municipios.length === 0}
-                >
-                  <option value="">Todos los municipios</option>
-                  {municipios.map(m => (
-                    <option key={m.cmun} value={m.nombre}>{m.nombre}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
           {/* File Upload */}
-          <div className="card fade-in stagger-2">
+          <div className="card fade-in stagger-1">
             <div className="card-title">
               <div className="card-title-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
