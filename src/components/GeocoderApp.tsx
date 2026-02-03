@@ -197,9 +197,11 @@ export default function GeocoderApp() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+        }
+
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
@@ -212,6 +214,19 @@ export default function GeocoderApp() {
               console.warn('Error parsing SSE:', e);
             }
           }
+        }
+
+        if (done) {
+          // Procesar cualquier dato restante en el buffer
+          if (buffer.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(buffer.slice(6));
+              handleSSEEvent(data);
+            } catch (e) {
+              console.warn('Error parsing final SSE:', e);
+            }
+          }
+          break;
         }
       }
 
